@@ -7,6 +7,8 @@ import { Edit2, Plus, Minus, Settings } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { InputDialog } from "@/components/ui/InputDialog";
+import { EditItemDialog } from "@/components/ui/EditItemDialog";
 
 interface Item {
   id: number;
@@ -21,7 +23,9 @@ interface Item {
 export function InventoryTable() {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
-  const [actionItem, setActionItem] = useState<{item: Item, action: string, qty?: number} | null>(null);
+  const [actionItem, setActionItem] = useState<{item: Item, action: string} | null>(null);
+  const [inputDialog, setInputDialog] = useState<{item: Item, action: 'receive' | 'issue'} | null>(null);
+  const [editDialog, setEditDialog] = useState<Item | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -50,7 +54,7 @@ export function InventoryTable() {
     }
   };
 
-  const handleStockAction = async (item: Item, action: 'receive' | 'issue', qty: number = 10) => {
+  const handleStockAction = async (item: Item, action: 'receive' | 'issue', qty: number) => {
     try {
       const newQty = action === 'receive' ? item.qty + qty : Math.max(0, item.qty - qty);
       
@@ -70,6 +74,33 @@ export function InventoryTable() {
         variant: "destructive",
       });
     }
+  };
+
+  const handleEditItem = async (editedItem: Item) => {
+    try {
+      // Update local state immediately for better UX
+      setItems(prevItems => 
+        prevItems.map(i => i.id === editedItem.id ? editedItem : i)
+      );
+
+      toast({
+        title: "Success",
+        description: `Updated ${editedItem.name} successfully`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update item",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSettings = (item: Item) => {
+    toast({
+      title: "Settings",
+      description: `Opening settings for ${item.name}`,
+    });
   };
 
   const getStockStatus = (qty: number, reorderLevel: number) => {
@@ -118,24 +149,24 @@ export function InventoryTable() {
                     <TableCell>{item.location}</TableCell>
                     <TableCell>
                       <div className="flex gap-2">
-                        <Button variant="outline" size="sm">
+                        <Button variant="outline" size="sm" onClick={() => setEditDialog(item)}>
                           <Edit2 className="h-4 w-4" />
                         </Button>
                         <Button 
                           variant="outline" 
                           size="sm"
-                          onClick={() => setActionItem({item, action: 'receive', qty: 10})}
+                          onClick={() => setInputDialog({item, action: 'receive'})}
                         >
                           <Plus className="h-4 w-4" />
                         </Button>
                         <Button 
                           variant="outline" 
                           size="sm"
-                          onClick={() => setActionItem({item, action: 'issue', qty: 5})}
+                          onClick={() => setInputDialog({item, action: 'issue'})}
                         >
                           <Minus className="h-4 w-4" />
                         </Button>
-                        <Button variant="outline" size="sm">
+                        <Button variant="outline" size="sm" onClick={() => handleSettings(item)}>
                           <Settings className="h-4 w-4" />
                         </Button>
                       </div>
@@ -148,17 +179,26 @@ export function InventoryTable() {
         </CardContent>
       </Card>
 
-      <ConfirmDialog
-        isOpen={!!actionItem}
-        onClose={() => setActionItem(null)}
-        onConfirm={() => {
-          if (actionItem) {
-            handleStockAction(actionItem.item, actionItem.action as 'receive' | 'issue', actionItem.qty);
-            setActionItem(null);
+      <InputDialog
+        isOpen={!!inputDialog}
+        onClose={() => setInputDialog(null)}
+        onConfirm={(qty) => {
+          if (inputDialog) {
+            handleStockAction(inputDialog.item, inputDialog.action, qty);
+            setInputDialog(null);
           }
         }}
-        title={`${actionItem?.action === 'receive' ? 'Receive' : 'Issue'} Stock`}
-        description={`Are you sure you want to ${actionItem?.action} ${actionItem?.qty} units of ${actionItem?.item.name}?`}
+        title={`${inputDialog?.action === 'receive' ? 'Receive' : 'Issue'} Stock`}
+        description={`Enter quantity to ${inputDialog?.action} for ${inputDialog?.item.name}`}
+        label="Quantity"
+        defaultValue={inputDialog?.action === 'receive' ? 10 : 5}
+      />
+
+      <EditItemDialog
+        isOpen={!!editDialog}
+        onClose={() => setEditDialog(null)}
+        onConfirm={handleEditItem}
+        item={editDialog}
       />
     </>
   );
